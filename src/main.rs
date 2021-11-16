@@ -18,6 +18,30 @@ fn get_msg(socket: &mut WebSocket<AutoStream>) -> String {
 	msg
 }
 
+fn extract_data<'a>(limit_order_book: &'a serde_json::Value, data_type: &str) -> &'a serde_json::Value {
+	limit_order_book.get("params").expect("Could not get params from JSON object.")
+					.get("data").expect("Could not get data from JSON object.")
+					.get(data_type).expect("Could not get bids from JSON object.")
+}
+
+fn push_data_to_order_book(limit_order_book: &mut LimitOrderBook, data: &serde_json::Value, is_bid: bool) {
+	let data = data.as_array().expect("Error extracting array from Value");
+	let mut i = 0;
+	while i < data.len() {
+		let order_data = OrderData {
+			order_type: data.get(i).unwrap().get(0).unwrap().as_str().unwrap().to_string(),
+			price: data.get(i).unwrap().get(1).unwrap().as_f64().unwrap(),
+			size: data.get(i).unwrap().get(2).unwrap().as_f64().unwrap()
+		};
+		if is_bid {
+			limit_order_book.bids.push(order_data);
+		} else {
+			limit_order_book.asks.push(order_data);
+		}
+		i += 1;
+	}
+}
+
 fn main() {
     let deribit_url = format!(
         "{}/public/subscribe",
@@ -45,31 +69,16 @@ fn main() {
 	let msg = get_msg(&mut socket);
 	println!("{}", msg);
 	let msg = get_msg(&mut socket);
-	let LOB: serde_json::Value = serde_json::from_str(msg.as_str()).expect("Error parsing JSON");
-	// println!("{:#?}", LOB);
-	let asks = LOB.get("params").expect("Could not get params from JSON object.")
-					.get("data").expect("Could not get data from JSON object.")
-					.get("asks").expect("Could not get asks from JSON object.");
-	let bids = LOB.get("params").expect("Could not get params from JSON object.")
-					.get("data").expect("Could not get data from JSON object.")
-					.get("bids").expect("Could not get bids from JSON object.");
-	// println!("asks = {:#?}\n\nbids = {:#?}", asks, bids);
+	
+	let order_book_state_raw: serde_json::Value = serde_json::from_str(msg.as_str()).expect("Error parsing JSON");
+	println!("Book raw = {:#?}", order_book_state_raw);
+	let asks = extract_data(&order_book_state_raw, "asks");
+	let bids = extract_data(&order_book_state_raw, "bids");
+
 	let mut limit_order_book = LimitOrderBook { bids: Vec::new(), asks: Vec::new() };
-	println!("bids = {:#?}", bids);
-	let bids = bids.as_array().expect("could");
-	let mut i = 0;
-	while i < bids.len() {
-		let order_data = OrderData {
-			order_type: bids.get(i).unwrap().get(0).unwrap().as_str().unwrap().to_string(),
-			price: bids.get(i).unwrap().get(1).unwrap().as_f64().unwrap(),
-			size: bids.get(i).unwrap().get(2).unwrap().as_f64().unwrap()
-		};
-		println!("bid = {:#?}", bids.get(i).unwrap());
-		println!("type = {:#?}", order_data);
-		limit_order_book.bids.push(order_data);
-		i += 1;
-	}
-	println!("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n\nLOB = {:#?}", limit_order_book);
+	push_data_to_order_book(&mut limit_order_book, bids, true);
+	push_data_to_order_book(&mut limit_order_book, asks, false);
+	// println!("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n\nLOB = {:#?}", limit_order_book);
     loop {
 		break;
 		// let msg = socket.read_message().expect("Error reading message");
