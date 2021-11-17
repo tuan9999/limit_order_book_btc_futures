@@ -8,7 +8,6 @@ pub struct OrderData {
     pub size: f64,
 }
 
-
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct LimitOrder {

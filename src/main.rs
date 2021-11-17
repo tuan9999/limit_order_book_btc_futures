@@ -54,27 +54,24 @@ fn populate_limit_order(order_state_raw: &mut serde_json::Value) -> LimitOrder {
     	bids: Vec::new(),
     	asks: Vec::new(),
 	};
-	// println!("data = {:#?}", data);
+
 	let asks = data.get("asks").expect("Error extracting asks").as_array().expect("Error extracting array from Value");
-	// println!("Asks = {:#?}", asks);
 	let bids = data.get("bids").expect("Error extracting bids").as_array().expect("Error extracting array from Value");
-	// println!("bids = {:#?}", bids);
+
 	push_to_limit_order(asks, &mut limit_order, false);
 	push_to_limit_order(bids, &mut limit_order, true);
-	// println!("limit order = {:#?}", limit_order);
+
 	limit_order
 }
 
 fn push_to_limit_order(data: &Vec<serde_json::Value>, limit_order: &mut LimitOrder, is_bid: bool) {
 	let mut i = 0;
 	while i < data.len() {
-		// println!("BID = {:#?}", data[i]);
 		let order_data = OrderData {
 			order_type: data.get(i).unwrap().get(0).unwrap().as_str().unwrap().to_string(),
 			price: data.get(i).unwrap().get(1).unwrap().as_f64().unwrap(),
 			size: data.get(i).unwrap().get(2).unwrap().as_f64().unwrap()
 		};
-		// println!("{:#?}", order_data);
 		if is_bid {
 			limit_order.bids.push(order_data);
 		} else {
@@ -89,35 +86,41 @@ fn update_order_book(limit_order_book: &mut LimitOrderBook, limit_order: &LimitO
 	update_orders(&mut limit_order_book.asks, &limit_order.asks, false);
 }
 
+fn handle_new_order(limit_order_book_orders: &mut Vec<OrderData>, order: &OrderData, is_bid: bool) {
+	let new_limit_order = OrderData {
+		order_type: order.order_type.clone(),
+		price: order.price,
+		size: order.size,
+	};
+	limit_order_book_orders.push(new_limit_order);
+	if is_bid {
+		limit_order_book_orders.sort_by(|a, b| b.price.partial_cmp(&a.price).unwrap() );
+	} else {
+		limit_order_book_orders.sort_by(|a, b| a.price.partial_cmp(&b.price).unwrap() );
+	}
+}
+
+fn handle_change_order(limit_order_book_orders: &mut Vec<OrderData>, order: &OrderData) {
+	let mut i = 0;
+	while i < limit_order_book_orders.len() {
+		if limit_order_book_orders[i].price == order.price {
+			limit_order_book_orders[i].size = order.size;
+		}
+		i += 1;
+	}
+}
+
+fn handle_delete_order(limit_order_book_orders: &mut Vec<OrderData>, order: &OrderData) {
+	let index = limit_order_book_orders.iter().position(|book_orders| book_orders.price == order.price).unwrap();
+	limit_order_book_orders.remove(index);
+}
+
 fn update_orders(limit_order_book_orders: &mut Vec<OrderData>, limit_orders: &Vec<OrderData>, is_bid: bool) {
 	for order in limit_orders {
 		match order.order_type.as_str() {
-			"new" => {
-				let new_limit_order = OrderData {
-					order_type: order.order_type.clone(),
-					price: order.price,
-					size: order.size,
-				};
-				limit_order_book_orders.push(new_limit_order);
-				if is_bid {
-					limit_order_book_orders.sort_by(|a, b| b.price.partial_cmp(&a.price).unwrap() );
-				} else {
-					limit_order_book_orders.sort_by(|a, b| a.price.partial_cmp(&b.price).unwrap() );
-				}
-			}
-			"change" => {
-				let mut i = 0;
-				while i < limit_order_book_orders.len() {
-					if limit_order_book_orders[i].price == order.price {
-						limit_order_book_orders[i].size += order.size;
-					}
-					i += 1;
-				}
-			}
-			"delete" => {
-				let index = limit_order_book_orders.iter().position(|book_orders| book_orders.price == order.price).unwrap();
-				limit_order_book_orders.remove(index);
-			}
+			"new" => handle_new_order(limit_order_book_orders, &order, is_bid),
+			"change" => handle_change_order(limit_order_book_orders, &order),
+			"delete" => handle_delete_order(limit_order_book_orders, &order),
 			_ => {}
 		}
 		
@@ -140,13 +143,14 @@ fn get_limit_order_book(socket: &mut WebSocket<AutoStream>) -> LimitOrderBook {
 	let msg = get_msg(socket);
 	
 	let order_book_state_raw: serde_json::Value = serde_json::from_str(msg.as_str()).expect("Error parsing JSON");
-	// println!("Book raw = {:#?}", order_book_state_raw);
+
 	let asks = extract_data(&order_book_state_raw, "asks");
 	let bids = extract_data(&order_book_state_raw, "bids");
 
 	let mut limit_order_book = LimitOrderBook { bids: Vec::new(), asks: Vec::new() };
 	push_data_to_order_book(&mut limit_order_book, bids, true);
 	push_data_to_order_book(&mut limit_order_book, asks, false);
+
 	limit_order_book
 }
 
@@ -170,11 +174,13 @@ fn main() {
 		let msg = get_msg(&mut socket);
 		let mut order_state_raw: serde_json::Value = serde_json::from_str(msg.as_str()).expect("Error parsing JSON");
 		let limit_order: LimitOrder = populate_limit_order(&mut order_state_raw);
+
 		if limit_orders.len() > 1 && limit_order.prev_change_id != limit_orders.get(limit_orders.len() - 1).unwrap().change_id {
 			println!("Error: Packet lost reconnecting: prev change id = {}, cur change id = {}", limit_order.prev_change_id, limit_orders.get(limit_orders.len() - 1).unwrap().change_id);
 			let (mut socket, _response) = connect(Url::parse(&deribit_url).unwrap()).expect("Can't connect to deribit websocket.");
 			let mut limit_order_book = get_limit_order_book(&mut socket);
 		}
+		
 		update_order_book(&mut limit_order_book, &limit_order);
 		println!("Best Bid: price = {:#?} quantity = {:#?}; Best Ask: price = {:#?} quantity = {:#?}", limit_order_book.bids.get(0).unwrap().price, limit_order_book.bids.get(0).unwrap().size, limit_order_book.asks.get(0).unwrap().price, limit_order_book.asks.get(0).unwrap().size);
 		limit_orders.push(limit_order);
