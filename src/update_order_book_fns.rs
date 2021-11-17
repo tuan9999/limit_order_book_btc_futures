@@ -5,6 +5,18 @@ pub mod update_order_book_functions {
 		update_orders(&mut limit_order_book.bids, &limit_order.bids, true);
 		update_orders(&mut limit_order_book.asks, &limit_order.asks, false);
 	}
+
+	fn update_orders(limit_order_book_orders: &mut Vec<OrderData>, limit_orders: &Vec<OrderData>, is_bid: bool) {
+		for order in limit_orders {
+			match order.order_type.as_str() {
+				"new" => handle_new_order(limit_order_book_orders, &order, is_bid),
+				"change" => handle_change_order(limit_order_book_orders, &order),
+				"delete" => handle_delete_order(limit_order_book_orders, &order),
+				_ => {}
+			}
+			
+		}
+	}
 	
 	fn handle_new_order(limit_order_book_orders: &mut Vec<OrderData>, order: &OrderData, is_bid: bool) {
 		let new_limit_order = OrderData {
@@ -33,17 +45,5 @@ pub mod update_order_book_functions {
 	fn handle_delete_order(limit_order_book_orders: &mut Vec<OrderData>, order: &OrderData) {
 		let index = limit_order_book_orders.iter().position(|book_orders| book_orders.price == order.price).unwrap();
 		limit_order_book_orders.remove(index);
-	}
-	
-	fn update_orders(limit_order_book_orders: &mut Vec<OrderData>, limit_orders: &Vec<OrderData>, is_bid: bool) {
-		for order in limit_orders {
-			match order.order_type.as_str() {
-				"new" => handle_new_order(limit_order_book_orders, &order, is_bid),
-				"change" => handle_change_order(limit_order_book_orders, &order),
-				"delete" => handle_delete_order(limit_order_book_orders, &order),
-				_ => {}
-			}
-			
-		}
 	}
 }

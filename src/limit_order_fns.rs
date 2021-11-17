@@ -5,14 +5,7 @@ pub mod limit_order_functions {
 		let data = order_state_raw.get("params").expect("Could not get params from JSON object.")
 									.get("data").expect("Could not get data from JSON object.");
 		
-		let mut limit_order = LimitOrder {
-			order_type: data.get("type").expect("Could not get order type").as_str().unwrap().to_string(),
-			timestamp: data.get("timestamp").expect("Could not get timestamp").as_u64().unwrap(),
-			prev_change_id: data.get("prev_change_id").expect("Could not get previous change id").as_u64().unwrap(),
-			change_id: data.get("change_id").expect("Could not get change id").as_u64().unwrap(),
-			bids: Vec::new(),
-			asks: Vec::new(),
-		};
+		let mut limit_order = initialise_limit_order_struct(&data);
 	
 		let asks = data.get("asks").expect("Error extracting asks").as_array().expect("Error extracting array from Value");
 		let bids = data.get("bids").expect("Error extracting bids").as_array().expect("Error extracting array from Value");
@@ -21,6 +14,17 @@ pub mod limit_order_functions {
 		push_to_limit_order(&mut limit_order, bids, true);
 	
 		limit_order
+	}
+
+	fn initialise_limit_order_struct(data: &serde_json::Value) -> LimitOrder {
+		LimitOrder {
+			order_type: data.get("type").expect("Could not get order type").as_str().unwrap().to_string(),
+			timestamp: data.get("timestamp").expect("Could not get timestamp").as_u64().unwrap(),
+			prev_change_id: data.get("prev_change_id").expect("Could not get previous change id").as_u64().unwrap(),
+			change_id: data.get("change_id").expect("Could not get change id").as_u64().unwrap(),
+			bids: Vec::new(),
+			asks: Vec::new(),
+		}
 	}
 	
 	fn push_to_limit_order(limit_order: &mut LimitOrder, data: &Vec<serde_json::Value>, is_bid: bool) {
