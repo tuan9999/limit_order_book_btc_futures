@@ -136,7 +136,7 @@ fn get_limit_order_book(socket: &mut WebSocket<AutoStream>) -> LimitOrderBook {
 		"id": 3
 	  }"#)).expect("Error sending request");
 	let msg = get_msg(socket);
-	// println!("{}", msg);
+	println!("{}", msg);
 	let msg = get_msg(socket);
 	
 	let order_book_state_raw: serde_json::Value = serde_json::from_str(msg.as_str()).expect("Error parsing JSON");
@@ -165,20 +165,18 @@ fn main() {
     }
 
 	let mut limit_order_book = get_limit_order_book(&mut socket);
-	let mut limit_order: LimitOrder;
-	let mut i = 0;
+	let mut limit_orders: Vec<LimitOrder> = Vec::new();
     loop {
 		let msg = get_msg(&mut socket);
 		let mut order_state_raw: serde_json::Value = serde_json::from_str(msg.as_str()).expect("Error parsing JSON");
-		// let prev_limit_order = limit_order;
 		let limit_order: LimitOrder = populate_limit_order(&mut order_state_raw);
-		// if i > 0 && limit_order.prev_change_id != prev_limit_order.change_id {
-		// 	println!("Error: Packet lost reconnecting");
-		// 	break;
-		// }
+		if limit_orders.len() > 1 && limit_order.prev_change_id != limit_orders.get(limit_orders.len() - 1).unwrap().change_id {
+			println!("Error: Packet lost reconnecting: prev change id = {}, cur change id = {}", limit_order.prev_change_id, limit_orders.get(limit_orders.len() - 1).unwrap().change_id);
+			let (mut socket, _response) = connect(Url::parse(&deribit_url).unwrap()).expect("Can't connect to deribit websocket.");
+			let mut limit_order_book = get_limit_order_book(&mut socket);
+		}
 		update_order_book(&mut limit_order_book, &limit_order);
-		println!("Best bid = {:#?} Best Ask = {:#?}", limit_order_book.bids.get(0).unwrap().price, limit_order_book.asks.get(0).unwrap().price);
-		i += 1;
-		
+		println!("Best Bid: price = {:#?} quantity = {:#?}; Best Ask: price = {:#?} quantity = {:#?}", limit_order_book.bids.get(0).unwrap().price, limit_order_book.bids.get(0).unwrap().size, limit_order_book.asks.get(0).unwrap().price, limit_order_book.asks.get(0).unwrap().size);
+		limit_orders.push(limit_order);
     }
 }
