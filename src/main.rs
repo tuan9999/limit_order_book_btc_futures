@@ -1,6 +1,5 @@
 use tungstenite::connect;
 use url::Url;
-use std::{time, time::Duration};
 
 mod models;
 use crate::models::{LimitOrderBook, OrderData, LimitOrder};
@@ -17,7 +16,6 @@ use crate::update_order_book_fns::update_order_book_functions::update_order_book
 mod order_book_fns;
 use crate::order_book_fns::order_book_functions::get_limit_order_book;
 
-static ONE_SECOND: Duration = time::Duration::from_millis(1000);
 static DERIBIT_WS_API: &str = "wss://www.deribit.com/ws/api/v2";
 
 fn main() {
@@ -50,6 +48,5 @@ fn main() {
 		update_order_book(&mut limit_order_book, &limit_order);
 		println!("Best Bid: price = {:#?} quantity = {:#?}; Best Ask: price = {:#?} quantity = {:#?}", limit_order_book.bids.get(0).unwrap().price, limit_order_book.bids.get(0).unwrap().size, limit_order_book.asks.get(0).unwrap().price, limit_order_book.asks.get(0).unwrap().size);
 		limit_orders.push(limit_order);
-		// thread::sleep(ONE_SECOND);
     }
 }
